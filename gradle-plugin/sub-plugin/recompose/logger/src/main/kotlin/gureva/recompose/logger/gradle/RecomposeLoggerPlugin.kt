@@ -40,7 +40,7 @@ class RecomposeLoggerPlugin : KotlinCompilerPluginSupportPlugin {
     private fun Project.applyRuntimeDependency() = afterEvaluate {
         if (isPluginEnabled()) {
             dependencies {
-                add("implementation", "gureva.recompose.logger:compiler-runtime:1.0.0")
+                add("implementation", "gureva.recompose.logger:compiler-runtime:1.0.3")
             }
         }
     }
