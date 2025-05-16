@@ -124,10 +124,83 @@ internal class RecomposeLogger(
     }
 
     private fun processBlockBody(body: IrBlockBody, function: IrFunction): IrBlockBody {
-        val modifiedStatements = processStatements(body.statements, function, "prefixLogName")
+        val modifiedStatements = mutableListOf<IrStatement>()
+
+        // Добавляем увеличение глубины перед выполнением функции
+        modifiedStatements += createDepthChangeCall(function, true)
+
+        val processedStatements = processStatements(body.statements, function, "prefix")
+        modifiedStatements.addAll(processedStatements)
+
+        // Добавляем уменьшение глубины после выполнения функции
+        modifiedStatements += createDepthChangeCall(function, false)
+
         body.statements.clear()
         body.statements.addAll(modifiedStatements)
         return body
+    }
+
+    private fun createDepthChangeCall(function: IrFunction, isEnter: Boolean): IrCall {
+        return IrCallImpl(
+            startOffset = UNDEFINED_OFFSET,
+            endOffset = UNDEFINED_OFFSET,
+            type = pluginContext.irBuiltIns.unitType,
+            symbol = pluginContext.referenceFunctions(
+                CallableId(
+                    FqName("gureva.recompose.logger.compiler.runtime"),
+                    Name.identifier(if (isEnter) "enterComposable" else "exitComposable")
+                )
+            ).single(),
+            typeArgumentsCount = 0,
+            valueArgumentsCount = 2
+        ).apply {
+            putValueArgument(0, function.name.asString().toIrConst(pluginContext.irBuiltIns.stringType))
+//            putValueArgument(1,
+//                if (isEnter) {
+//                    IrGetValueImpl(
+//                        UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+//                        pluginContext.irBuiltIns.intType,
+//                        createComposableDepthVariable().symbol
+//                    )
+//                } else {
+//                    IrGetValueImpl(
+//                        UNDEFINED_OFFSET, UNDEFINED_OFFSET,
+//                        pluginContext.irBuiltIns.intType,
+//                        createComposableDepthVariable(decrement = true).symbol
+//                    )
+//                }
+//            )
+            val x = 1
+            putValueArgument(1, x.toIrConst(pluginContext.irBuiltIns.intType))
+        }
+    }
+
+    private fun createComposableDepthVariable(decrement: Boolean = false): IrVariable {
+        return IrVariableImpl(
+            startOffset = UNDEFINED_OFFSET,
+            endOffset = UNDEFINED_OFFSET,
+            origin = IrDeclarationOrigin.DEFINED,
+            symbol = IrVariableSymbolImpl(),
+            name = Name.identifier("\$composableDepth"),
+            type = pluginContext.irBuiltIns.intType,
+            isVar = true,
+            isConst = false,
+            isLateinit = false
+        ).apply {
+            initializer = IrCallImpl(
+                startOffset = UNDEFINED_OFFSET,
+                endOffset = UNDEFINED_OFFSET,
+                type = pluginContext.irBuiltIns.intType,
+                symbol = pluginContext.referenceFunctions(
+                    CallableId(
+                        FqName("gureva.recompose.logger.compiler.runtime"),
+                        Name.identifier(if (decrement) "decrementDepth" else "incrementDepth")
+                    )
+                ).single(),
+                typeArgumentsCount = 0,
+                valueArgumentsCount = 0
+            )
+        }
     }
 
     private fun processStatements(
