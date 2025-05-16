@@ -2,7 +2,6 @@ package gureva.recompose.logger.compiler.plugin
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.serialization.mangle.ir.isAnonymous
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
@@ -36,6 +35,7 @@ import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.functions
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.isVararg
+import org.jetbrains.kotlin.ir.util.statements
 import org.jetbrains.kotlin.ir.util.toIrConst
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.name.CallableId
@@ -70,6 +70,20 @@ internal class RecomposeLogger(
 
     override fun visitFunction(declaration: IrFunction): IrStatement {
         currentFunction = FunctionInfo(declaration, currentFunction)
+
+        if (declaration.isComposable()) {
+            val statements = declaration.body?.statements
+            val modifiedStatements = mutableListOf<IrStatement>()
+
+            modifiedStatements += createDepthChangeCall(declaration.name.asString(), true)
+            if (statements != null) modifiedStatements += statements
+            modifiedStatements += createDepthChangeCall(declaration.name.asString(), false)
+
+            val body: IrBlockBody = declaration.body as IrBlockBody
+            body.statements.clear()
+            body.statements.addAll(modifiedStatements)
+        }
+
         val result = super.visitFunction(declaration)
         currentFunction = currentFunction?.parent
         return result
@@ -124,23 +138,13 @@ internal class RecomposeLogger(
     }
 
     private fun processBlockBody(body: IrBlockBody, function: IrFunction): IrBlockBody {
-        val modifiedStatements = mutableListOf<IrStatement>()
-
-        // Добавляем увеличение глубины перед выполнением функции
-        modifiedStatements += createDepthChangeCall(function, true)
-
-        val processedStatements = processStatements(body.statements, function, "prefix")
-        modifiedStatements.addAll(processedStatements)
-
-        // Добавляем уменьшение глубины после выполнения функции
-        modifiedStatements += createDepthChangeCall(function, false)
-
+        val processedStatements = processStatements(body.statements, function)
         body.statements.clear()
-        body.statements.addAll(modifiedStatements)
+        body.statements.addAll(processedStatements)
         return body
     }
 
-    private fun createDepthChangeCall(function: IrFunction, isEnter: Boolean): IrCall {
+    private fun createDepthChangeCall(function: String, isEnter: Boolean): IrCall {
         return IrCallImpl(
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
@@ -148,13 +152,14 @@ internal class RecomposeLogger(
             symbol = pluginContext.referenceFunctions(
                 CallableId(
                     FqName("gureva.recompose.logger.compiler.runtime"),
-                    Name.identifier(if (isEnter) "enterComposable" else "exitComposable")
+                    Name.identifier("enterComposable")
                 )
             ).single(),
             typeArgumentsCount = 0,
             valueArgumentsCount = 2
         ).apply {
-            putValueArgument(0, function.name.asString().toIrConst(pluginContext.irBuiltIns.stringType))
+            putValueArgument(0, isEnter.toIrConst(pluginContext.irBuiltIns.booleanType))
+            putValueArgument(1, function.toIrConst(pluginContext.irBuiltIns.stringType))
 //            putValueArgument(1,
 //                if (isEnter) {
 //                    IrGetValueImpl(
@@ -170,61 +175,30 @@ internal class RecomposeLogger(
 //                    )
 //                }
 //            )
-            val x = 1
-            putValueArgument(1, x.toIrConst(pluginContext.irBuiltIns.intType))
-        }
-    }
-
-    private fun createComposableDepthVariable(decrement: Boolean = false): IrVariable {
-        return IrVariableImpl(
-            startOffset = UNDEFINED_OFFSET,
-            endOffset = UNDEFINED_OFFSET,
-            origin = IrDeclarationOrigin.DEFINED,
-            symbol = IrVariableSymbolImpl(),
-            name = Name.identifier("\$composableDepth"),
-            type = pluginContext.irBuiltIns.intType,
-            isVar = true,
-            isConst = false,
-            isLateinit = false
-        ).apply {
-            initializer = IrCallImpl(
-                startOffset = UNDEFINED_OFFSET,
-                endOffset = UNDEFINED_OFFSET,
-                type = pluginContext.irBuiltIns.intType,
-                symbol = pluginContext.referenceFunctions(
-                    CallableId(
-                        FqName("gureva.recompose.logger.compiler.runtime"),
-                        Name.identifier(if (decrement) "decrementDepth" else "incrementDepth")
-                    )
-                ).single(),
-                typeArgumentsCount = 0,
-                valueArgumentsCount = 0
-            )
+//            val x = 1
+//            putValueArgument(1, x.toIrConst(pluginContext.irBuiltIns.intType))
         }
     }
 
     private fun processStatements(
         statements: List<IrStatement>,
-        outerFunction: IrFunction,
-        prefixLogName: String
+        outerFunction: IrFunction
     ): MutableList<IrStatement> {
         val modifiedStatements = mutableListOf<IrStatement>()
         for (statement in statements) {
             when (statement) {
                 is IrBlock -> {
-                    val newStatements = processStatements(statement.statements, outerFunction, prefixLogName)
+                    val newStatements = processStatements(statement.statements, outerFunction)
                     modifiedStatements += newStatements
                 }
 
                 is IrCall -> {
-                    messageCollector.report(CompilerMessageSeverity.WARNING, "${outerFunction.name} ${statement.symbol.owner.name}")
                     if (!statement.isRecomposeLoggerFunction() && statement.isValidComposableCall()) {
                         val startTime = createTimeVariable("startTime", outerFunction)
                         val endTime = createTimeVariable("endTime", outerFunction)
 
                         val (logger, variables) = createRecomposeLoggerCall(
                             outerFunction,
-                            prefixLogName,
                             statement,
                             startTime,
                             endTime
@@ -235,7 +209,6 @@ internal class RecomposeLogger(
                         modifiedStatements += statement
                         modifiedStatements += endTime
                         modifiedStatements += logger
-
                     } else {
                         modifiedStatements += statement
                     }
@@ -251,7 +224,6 @@ internal class RecomposeLogger(
 
     private fun createRecomposeLoggerCall(
         outerFunction: IrFunction,
-        prefixLogName: String,
         call: IrCall,
         startTime: IrVariable,
         endTime: IrVariable,
@@ -265,7 +237,6 @@ internal class RecomposeLogger(
             call.modifyArgument(index, outerFunction, variables, arguments)
         }
 
-        val logName = "$prefixLogName:${call.symbol.owner.name.asString()}"
         return IrCallImpl(
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
@@ -274,7 +245,7 @@ internal class RecomposeLogger(
             typeArgumentsCount = 0,
             valueArgumentsCount = 4
         ).apply {
-            putValueArgument(0, logName.toIrConst(pluginContext.irBuiltIns.stringType))
+            putValueArgument(0, call.symbol.owner.name.asString().toIrConst(pluginContext.irBuiltIns.stringType))
             putValueArgument(1, IrGetValueImpl(
                 startOffset = SYNTHETIC_OFFSET,
                 endOffset = SYNTHETIC_OFFSET,
@@ -326,7 +297,6 @@ internal class RecomposeLogger(
         val function: IrFunction,
         val parent: FunctionInfo? = null,
     ) {
-        val calledFunctionNamesStack: MutableList<String> = mutableListOf()
 
         fun searchNotAnonymous(): FunctionInfo? {
             if (!function.name.isAnonymous) return this

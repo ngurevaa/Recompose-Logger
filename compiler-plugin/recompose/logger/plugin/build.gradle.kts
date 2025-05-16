@@ -26,7 +26,7 @@ publishing {
         create<MavenPublication>("RecomposeLogger") {
             groupId = "gureva.recompose.logger"
             artifactId = "compiler-plugin"
-            version = "1.0.0"
+            version = "1.0.18"
             from(components["java"])
         }
     }

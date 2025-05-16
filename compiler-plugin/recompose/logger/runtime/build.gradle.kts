@@ -36,7 +36,7 @@ publishing {
         create<MavenPublication>("RecomposeLoggerRuntime") {
             groupId = "gureva.recompose.logger"
             artifactId = "compiler-runtime"
-            version = "1.0.3"
+            version = "1.0.19"
             afterEvaluate {
                 from(components["release"])
             }

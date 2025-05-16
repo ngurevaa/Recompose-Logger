@@ -34,13 +34,13 @@ class RecomposeLoggerPlugin : KotlinCompilerPluginSupportPlugin {
     override fun getPluginArtifact(): SubpluginArtifact = SubpluginArtifact(
         groupId = "gureva.recompose.logger",
         artifactId = "compiler-plugin",
-        version = "1.0.0"
+        version = "1.0.18"
     )
 
     private fun Project.applyRuntimeDependency() = afterEvaluate {
         if (isPluginEnabled()) {
             dependencies {
-                add("implementation", "gureva.recompose.logger:compiler-runtime:1.0.3")
+                add("implementation", "gureva.recompose.logger:compiler-runtime:1.0.19")
             }
         }
     }

@@ -28,7 +28,7 @@ fun RecomposeLogger(
 
     val isEnabled = RecomposeLoggerConfig.isEnabled
     if (recomposeLog.isNotEmpty() && isEnabled) {
-        Log.i("RecomposeLogger", "$name recomposed. Reason for now:")
+        Log.i("RecomposeLogger", "${ComposableFunctionStack.getAll()}:$name recomposed. Reason for now:")
         Log.i("RecomposeLogger", "${recomposeLog}\n")
         Log.i("RecomposeLogger", "Recomposition time: ${endTime - startTime} ns\n ")
     }
