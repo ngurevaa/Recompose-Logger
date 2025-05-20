@@ -70,7 +70,13 @@ internal class RecomposeLogger(
 
     override fun visitFunction(declaration: IrFunction): IrStatement {
         currentFunction = FunctionInfo(declaration, currentFunction)
+        processFunction(declaration)
+        val result = super.visitFunction(declaration)
+        currentFunction = currentFunction?.parent
+        return result
+    }
 
+    private fun processFunction(declaration: IrFunction) {
         if (declaration.isComposable()) {
             val statements = declaration.body?.statements
             val modifiedStatements = mutableListOf<IrStatement>()
@@ -83,10 +89,6 @@ internal class RecomposeLogger(
             body.statements.clear()
             body.statements.addAll(modifiedStatements)
         }
-
-        val result = super.visitFunction(declaration)
-        currentFunction = currentFunction?.parent
-        return result
     }
 
     private fun createTimeVariable(name: String, function: IrFunction): IrVariable {
@@ -149,34 +151,12 @@ internal class RecomposeLogger(
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
             type = pluginContext.irBuiltIns.unitType,
-            symbol = pluginContext.referenceFunctions(
-                CallableId(
-                    FqName("gureva.recompose.logger.compiler.runtime"),
-                    Name.identifier("enterComposable")
-                )
-            ).single(),
+            symbol = pluginContext.referenceFunctions(trackNestedComposableCallableId).single(),
             typeArgumentsCount = 0,
             valueArgumentsCount = 2
         ).apply {
             putValueArgument(0, isEnter.toIrConst(pluginContext.irBuiltIns.booleanType))
             putValueArgument(1, function.toIrConst(pluginContext.irBuiltIns.stringType))
-//            putValueArgument(1,
-//                if (isEnter) {
-//                    IrGetValueImpl(
-//                        UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-//                        pluginContext.irBuiltIns.intType,
-//                        createComposableDepthVariable().symbol
-//                    )
-//                } else {
-//                    IrGetValueImpl(
-//                        UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-//                        pluginContext.irBuiltIns.intType,
-//                        createComposableDepthVariable(decrement = true).symbol
-//                    )
-//                }
-//            )
-//            val x = 1
-//            putValueArgument(1, x.toIrConst(pluginContext.irBuiltIns.intType))
         }
     }
 
@@ -448,6 +428,11 @@ internal class RecomposeLogger(
         val recomposeLoggerCallableId = CallableId(
             FqName("gureva.recompose.logger.compiler.runtime"),
             Name.identifier("RecomposeLogger")
+        )
+
+        val trackNestedComposableCallableId = CallableId(
+            FqName("gureva.recompose.logger.compiler.runtime"),
+            Name.identifier("enterComposable")
         )
 
         fun IrCall.isRecomposeLoggerFunction(): Boolean {
