@@ -6,7 +6,7 @@ import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 
-class RecomposeLoggerIrGeneration(
+class RecomposeLoggerIrGenerationExtension(
     private val logModifierChanges: Boolean,
     private val logFunctionChanges: Boolean,
     private val messageCollector: MessageCollector

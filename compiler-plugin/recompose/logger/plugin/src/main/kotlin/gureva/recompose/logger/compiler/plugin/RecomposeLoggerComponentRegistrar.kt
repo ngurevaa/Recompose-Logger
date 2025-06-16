@@ -19,7 +19,7 @@ class RecomposeLoggerComponentRegistrar : ComponentRegistrar {
             val messageCollector = configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
 
             project.extensionArea.getExtensionPoint(IrGenerationExtension.extensionPointName)
-                .registerExtension(RecomposeLoggerIrGeneration(logModifierChanges, logFunctionChanges, messageCollector), LoadingOrder.FIRST, project)
+                .registerExtension(RecomposeLoggerIrGenerationExtension(logModifierChanges, logFunctionChanges, messageCollector), LoadingOrder.FIRST, project)
         }
     }
 

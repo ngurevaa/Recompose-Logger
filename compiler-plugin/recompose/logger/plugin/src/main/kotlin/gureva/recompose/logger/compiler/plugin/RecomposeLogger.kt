@@ -268,8 +268,6 @@ internal class RecomposeLogger(
                     variable.symbol,
                 )
             }
-        } else {
-            arguments[parameter.name.asString()] = expression.deepCopySavingMetadata(outerFunction)
         }
     }
 
